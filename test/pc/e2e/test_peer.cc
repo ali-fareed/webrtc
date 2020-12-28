@@ -42,14 +42,15 @@ TestPeer::TestPeer(
     rtc::scoped_refptr<PeerConnectionInterface> pc,
     std::unique_ptr<MockPeerConnectionObserver> observer,
     std::unique_ptr<Params> params,
-    std::vector<std::unique_ptr<test::FrameGeneratorInterface>>
-        video_generators,
-    rtc::scoped_refptr<AudioProcessing> audio_processing)
-    : PeerConnectionWrapper::PeerConnectionWrapper(std::move(pc_factory),
-                                                   std::move(pc),
-                                                   std::move(observer)),
+    std::vector<PeerConfigurerImpl::VideoSource> video_sources,
+    rtc::scoped_refptr<AudioProcessing> audio_processing,
+    std::unique_ptr<rtc::Thread> worker_thread)
+    : worker_thread_(std::move(worker_thread)),
+      wrapper_(std::make_unique<PeerConnectionWrapper>(std::move(pc_factory),
+                                                       std::move(pc),
+                                                       std::move(observer))),
       params_(std::move(params)),
-      video_generators_(std::move(video_generators)),
+      video_sources_(std::move(video_sources)),
       audio_processing_(audio_processing) {}
 
 }  // namespace webrtc_pc_e2e

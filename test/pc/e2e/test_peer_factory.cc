@@ -12,14 +12,20 @@
 #include <utility>
 
 #include "absl/memory/memory.h"
+#include "absl/strings/string_view.h"
 #include "api/task_queue/default_task_queue_factory.h"
+#include "api/test/create_time_controller.h"
+#include "api/test/time_controller.h"
+#include "api/transport/field_trial_based_config.h"
 #include "api/video_codecs/builtin_video_decoder_factory.h"
 #include "api/video_codecs/builtin_video_encoder_factory.h"
 #include "media/engine/webrtc_media_engine.h"
 #include "media/engine/webrtc_media_engine_defaults.h"
 #include "modules/audio_processing/aec_dump/aec_dump_factory.h"
 #include "p2p/client/basic_port_allocator.h"
+#include "test/pc/e2e/analyzer/video/quality_analyzing_video_encoder.h"
 #include "test/pc/e2e/echo/echo_emulation.h"
+#include "test/pc/e2e/peer_configurer.h"
 #include "test/testsupport/copy_to_file_audio_capturer.h"
 
 namespace webrtc {
@@ -40,25 +46,37 @@ constexpr int kDefaultSamplingFrequencyInHz = 48000;
 // and |pc_dependencies| if they are omitted. Also setup required
 // dependencies, that won't be specially provided by factory and will be just
 // transferred to peer connection creation code.
-void SetMandatoryEntities(InjectableComponents* components) {
+void SetMandatoryEntities(InjectableComponents* components,
+                          TimeController& time_controller) {
   RTC_DCHECK(components->pcf_dependencies);
   RTC_DCHECK(components->pc_dependencies);
 
   // Setup required peer connection factory dependencies.
   if (components->pcf_dependencies->task_queue_factory == nullptr) {
     components->pcf_dependencies->task_queue_factory =
-        CreateDefaultTaskQueueFactory();
+        time_controller.CreateTaskQueueFactory();
   }
   if (components->pcf_dependencies->call_factory == nullptr) {
-    components->pcf_dependencies->call_factory = webrtc::CreateCallFactory();
+    components->pcf_dependencies->call_factory =
+        CreateTimeControllerBasedCallFactory(&time_controller);
   }
   if (components->pcf_dependencies->event_log_factory == nullptr) {
     components->pcf_dependencies->event_log_factory =
         std::make_unique<RtcEventLogFactory>(
             components->pcf_dependencies->task_queue_factory.get());
   }
+  if (!components->pcf_dependencies->trials) {
+    components->pcf_dependencies->trials =
+        std::make_unique<FieldTrialBasedConfig>();
+  }
 }
 
+// Returns mapping from stream label to optional spatial index.
+// If we have stream label "Foo" and mapping contains
+// 1. |absl::nullopt| means "Foo" isn't simulcast/SVC stream
+// 2. |kAnalyzeAnySpatialStream| means all simulcast/SVC streams are required
+// 3. Concrete value means that particular simulcast/SVC stream have to be
+//    analyzed.
 std::map<std::string, absl::optional<int>>
 CalculateRequiredSpatialIndexPerStream(
     const std::vector<VideoConfig>& video_configs) {
@@ -69,6 +87,9 @@ CalculateRequiredSpatialIndexPerStream(
     absl::optional<int> spatial_index;
     if (video_config.simulcast_config) {
       spatial_index = video_config.simulcast_config->target_spatial_index;
+      if (!spatial_index) {
+        spatial_index = kAnalyzeAnySpatialStream;
+      }
     }
     bool res = out.insert({*video_config.stream_label, spatial_index}).second;
     RTC_DCHECK(res) << "Duplicate video_config.stream_label="
@@ -157,10 +178,14 @@ std::unique_ptr<cricket::MediaEngineInterface> CreateMediaEngine(
   media_deps.video_decoder_factory =
       std::move(pcf_dependencies->video_decoder_factory);
   webrtc::SetMediaEngineDefaults(&media_deps);
+  RTC_DCHECK(pcf_dependencies->trials);
+  media_deps.trials = pcf_dependencies->trials.get();
+
   return cricket::CreateMediaEngine(std::move(media_deps));
 }
 
 void WrapVideoEncoderFactory(
+    absl::string_view peer_name,
     double bitrate_multiplier,
     std::map<std::string, absl::optional<int>> stream_required_spatial_index,
     PeerConnectionFactoryComponents* pcf_dependencies,
@@ -173,11 +198,12 @@ void WrapVideoEncoderFactory(
   }
   pcf_dependencies->video_encoder_factory =
       video_analyzer_helper->WrapVideoEncoderFactory(
-          std::move(video_encoder_factory), bitrate_multiplier,
+          peer_name, std::move(video_encoder_factory), bitrate_multiplier,
           std::move(stream_required_spatial_index));
 }
 
 void WrapVideoDecoderFactory(
+    absl::string_view peer_name,
     PeerConnectionFactoryComponents* pcf_dependencies,
     VideoQualityAnalyzerInjectionHelper* video_analyzer_helper) {
   std::unique_ptr<VideoDecoderFactory> video_decoder_factory;
@@ -188,7 +214,7 @@ void WrapVideoDecoderFactory(
   }
   pcf_dependencies->video_decoder_factory =
       video_analyzer_helper->WrapVideoDecoderFactory(
-          std::move(video_decoder_factory));
+          peer_name, std::move(video_decoder_factory));
 }
 
 // Creates PeerConnectionFactoryDependencies objects, providing entities
@@ -197,10 +223,12 @@ PeerConnectionFactoryDependencies CreatePCFDependencies(
     std::unique_ptr<PeerConnectionFactoryComponents> pcf_dependencies,
     std::unique_ptr<cricket::MediaEngineInterface> media_engine,
     rtc::Thread* signaling_thread,
+    rtc::Thread* worker_thread,
     rtc::Thread* network_thread) {
   PeerConnectionFactoryDependencies pcf_deps;
-  pcf_deps.network_thread = network_thread;
   pcf_deps.signaling_thread = signaling_thread;
+  pcf_deps.worker_thread = worker_thread;
+  pcf_deps.network_thread = network_thread;
   pcf_deps.media_engine = std::move(media_engine);
 
   pcf_deps.call_factory = std::move(pcf_dependencies->call_factory);
@@ -215,12 +243,11 @@ PeerConnectionFactoryDependencies CreatePCFDependencies(
     pcf_deps.network_controller_factory =
         std::move(pcf_dependencies->network_controller_factory);
   }
-  if (pcf_dependencies->media_transport_factory != nullptr) {
-    pcf_deps.media_transport_factory =
-        std::move(pcf_dependencies->media_transport_factory);
-  }
   if (pcf_dependencies->neteq_factory != nullptr) {
     pcf_deps.neteq_factory = std::move(pcf_dependencies->neteq_factory);
+  }
+  if (pcf_dependencies->trials != nullptr) {
+    pcf_deps.trials = std::move(pcf_dependencies->trials);
   }
 
   return pcf_deps;
@@ -270,46 +297,50 @@ absl::optional<RemotePeerAudioConfig> RemotePeerAudioConfig::Create(
 }
 
 std::unique_ptr<TestPeer> TestPeerFactory::CreateTestPeer(
-    std::unique_ptr<InjectableComponents> components,
-    std::unique_ptr<Params> params,
-    std::vector<std::unique_ptr<test::FrameGeneratorInterface>>
-        video_generators,
+    std::unique_ptr<PeerConfigurerImpl> configurer,
     std::unique_ptr<MockPeerConnectionObserver> observer,
-    VideoQualityAnalyzerInjectionHelper* video_analyzer_helper,
-    rtc::Thread* signaling_thread,
     absl::optional<RemotePeerAudioConfig> remote_audio_config,
     double bitrate_multiplier,
-    absl::optional<EchoEmulationConfig> echo_emulation_config,
-    rtc::TaskQueue* task_queue) {
+    absl::optional<PeerConnectionE2EQualityTestFixture::EchoEmulationConfig>
+        echo_emulation_config) {
+  std::unique_ptr<InjectableComponents> components =
+      configurer->ReleaseComponents();
+  std::unique_ptr<Params> params = configurer->ReleaseParams();
+  std::vector<PeerConfigurerImpl::VideoSource> video_sources =
+      configurer->ReleaseVideoSources();
   RTC_DCHECK(components);
   RTC_DCHECK(params);
-  RTC_DCHECK_EQ(params->video_configs.size(), video_generators.size());
-  SetMandatoryEntities(components.get());
+  RTC_DCHECK_EQ(params->video_configs.size(), video_sources.size());
+  SetMandatoryEntities(components.get(), time_controller_);
   params->rtc_configuration.sdp_semantics = SdpSemantics::kUnifiedPlan;
 
   // Create peer connection factory.
   rtc::scoped_refptr<AudioProcessing> audio_processing =
       webrtc::AudioProcessingBuilder().Create();
-  if (params->aec_dump_path) {
-    audio_processing->AttachAecDump(
-        AecDumpFactory::Create(*params->aec_dump_path, -1, task_queue));
+  if (params->aec_dump_path && audio_processing) {
+    audio_processing->CreateAndAttachAecDump(*params->aec_dump_path, -1,
+                                             task_queue_);
   }
   rtc::scoped_refptr<AudioDeviceModule> audio_device_module =
       CreateAudioDeviceModule(
           params->audio_config, remote_audio_config, echo_emulation_config,
           components->pcf_dependencies->task_queue_factory.get());
   WrapVideoEncoderFactory(
-      bitrate_multiplier,
+      params->name.value(), bitrate_multiplier,
       CalculateRequiredSpatialIndexPerStream(params->video_configs),
-      components->pcf_dependencies.get(), video_analyzer_helper);
-  WrapVideoDecoderFactory(components->pcf_dependencies.get(),
-                          video_analyzer_helper);
+      components->pcf_dependencies.get(), video_analyzer_helper_);
+  WrapVideoDecoderFactory(params->name.value(),
+                          components->pcf_dependencies.get(),
+                          video_analyzer_helper_);
   std::unique_ptr<cricket::MediaEngineInterface> media_engine =
       CreateMediaEngine(components->pcf_dependencies.get(), audio_device_module,
                         audio_processing);
+
+  std::unique_ptr<rtc::Thread> worker_thread =
+      time_controller_.CreateThread("worker_thread");
   PeerConnectionFactoryDependencies pcf_deps = CreatePCFDependencies(
       std::move(components->pcf_dependencies), std::move(media_engine),
-      signaling_thread, components->network_thread);
+      signaling_thread_, worker_thread.get(), components->network_thread);
   rtc::scoped_refptr<PeerConnectionFactoryInterface> peer_connection_factory =
       CreateModularPeerConnectionFactory(std::move(pcf_deps));
 
@@ -319,11 +350,12 @@ std::unique_ptr<TestPeer> TestPeerFactory::CreateTestPeer(
   rtc::scoped_refptr<PeerConnectionInterface> peer_connection =
       peer_connection_factory->CreatePeerConnection(params->rtc_configuration,
                                                     std::move(pc_deps));
-  peer_connection->SetBitrate(params->bitrate_params);
+  peer_connection->SetBitrate(params->bitrate_settings);
 
   return absl::WrapUnique(new TestPeer(
       peer_connection_factory, peer_connection, std::move(observer),
-      std::move(params), std::move(video_generators), audio_processing));
+      std::move(params), std::move(video_sources), audio_processing,
+      std::move(worker_thread)));
 }
 
 }  // namespace webrtc_pc_e2e

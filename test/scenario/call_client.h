@@ -18,6 +18,7 @@
 
 #include "api/rtc_event_log/rtc_event_log.h"
 #include "api/test/time_controller.h"
+#include "api/units/data_rate.h"
 #include "call/call.h"
 #include "modules/audio_device/include/test_audio_device.h"
 #include "modules/congestion_controller/goog_cc/test/goog_cc_printer.h"
@@ -75,6 +76,7 @@ class LoggingNetworkControllerFactory
   TimeDelta GetProcessInterval() const override;
   // TODO(srte): Consider using the Columnprinter interface for this.
   void LogCongestionControllerStats(Timestamp at_time);
+  void SetRemoteBitrateEstimate(RemoteBitrateReport msg);
 
   NetworkControlUpdate GetUpdate() const;
 
@@ -109,9 +111,16 @@ class CallClient : public EmulatedNetworkReceiverInterface {
   DataRate target_rate() const;
   DataRate stable_target_rate() const;
   DataRate padding_rate() const;
+  void UpdateBitrateConstraints(const BitrateConstraints& constraints);
+  void SetRemoteBitrate(DataRate bitrate);
 
   void OnPacketReceived(EmulatedIpPacket packet) override;
   std::unique_ptr<RtcEventLogOutput> GetLogWriter(std::string name);
+
+  // Exposed publicly so that tests can execute tasks such as querying stats
+  // for media streams in the expected runtime environment (essentially what
+  // CallClient does internally for GetStats()).
+  void SendTask(std::function<void()> task);
 
  private:
   friend class Scenario;
@@ -129,7 +138,6 @@ class CallClient : public EmulatedNetworkReceiverInterface {
   uint32_t GetNextAudioLocalSsrc();
   uint32_t GetNextRtxSsrc();
   void AddExtensions(std::vector<RtpExtension> extensions);
-  void SendTask(std::function<void()> task);
   int16_t Bind(EmulatedEndpoint* endpoint);
   void UnBind();
 
@@ -152,6 +160,8 @@ class CallClient : public EmulatedNetworkReceiverInterface {
   std::map<uint32_t, MediaType> ssrc_media_types_;
   // Defined last so it's destroyed first.
   TaskQueueForTest task_queue_;
+
+  rtc::scoped_refptr<SharedModuleThread> module_thread_;
 
   const FieldTrialBasedConfig field_trials_;
 };
