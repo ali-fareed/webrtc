@@ -60,6 +60,10 @@ class AudioState : public webrtc::AudioState {
                         int sample_rate_hz,
                         size_t num_channels);
   void RemoveSendingStream(webrtc::AudioSendStream* stream);
+    
+  rtc::scoped_refptr<AudioMixer> GetAudioMixer() {
+      return config_.audio_mixer;
+  }
 
  private:
   void UpdateAudioTransportWithSendingStreams();
