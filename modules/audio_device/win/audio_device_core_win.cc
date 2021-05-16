@@ -204,7 +204,7 @@ HRESULT AudioDeviceWindowsCore::QueryInterface(REFIID iid, void** object) {
 //  CoreAudioIsSupported
 // ----------------------------------------------------------------------------
 bool AudioDeviceWindowsCore::CoreAudioIsSupported() {
-  RTC_LOG(LS_VERBOSE) << __FUNCTION__;
+  RTC_DLOG(LS_VERBOSE) << __FUNCTION__;
 
   bool MMDeviceIsAvailable(false);
   bool coreAudioIsSupported(false);
@@ -426,7 +426,7 @@ AudioDeviceWindowsCore::AudioDeviceWindowsCore()
       _outputDevice(AudioDeviceModule::kDefaultCommunicationDevice),
       _inputDeviceIndex(0),
       _outputDeviceIndex(0) {
-  RTC_LOG(LS_INFO) << __FUNCTION__ << " created";
+  RTC_DLOG(LS_INFO) << __FUNCTION__ << " created";
   RTC_DCHECK(_comInit.Succeeded());
 
   // Try to load the Avrt DLL
@@ -525,7 +525,7 @@ AudioDeviceWindowsCore::AudioDeviceWindowsCore()
 // ----------------------------------------------------------------------------
 
 AudioDeviceWindowsCore::~AudioDeviceWindowsCore() {
-  RTC_LOG(LS_INFO) << __FUNCTION__ << " destroyed";
+  RTC_DLOG(LS_INFO) << __FUNCTION__ << " destroyed";
 
   Terminate();
 
@@ -1388,7 +1388,7 @@ Exit:
 // ----------------------------------------------------------------------------
 
 int32_t AudioDeviceWindowsCore::MaxMicrophoneVolume(uint32_t& maxVolume) const {
-  RTC_LOG(LS_VERBOSE) << __FUNCTION__;
+  RTC_DLOG(LS_VERBOSE) << __FUNCTION__;
 
   if (!_microphoneIsInitialized) {
     return -1;
@@ -3557,7 +3557,7 @@ int AudioDeviceWindowsCore::SetVtI4Property(IPropertyStore* ptrPS,
 // ----------------------------------------------------------------------------
 
 int32_t AudioDeviceWindowsCore::_RefreshDeviceList(EDataFlow dir) {
-  RTC_LOG(LS_VERBOSE) << __FUNCTION__;
+  RTC_DLOG(LS_VERBOSE) << __FUNCTION__;
 
   HRESULT hr = S_OK;
   IMMDeviceCollection* pCollection = NULL;
@@ -3593,7 +3593,7 @@ int32_t AudioDeviceWindowsCore::_RefreshDeviceList(EDataFlow dir) {
 // ----------------------------------------------------------------------------
 
 int16_t AudioDeviceWindowsCore::_DeviceListCount(EDataFlow dir) {
-  RTC_LOG(LS_VERBOSE) << __FUNCTION__;
+  RTC_DLOG(LS_VERBOSE) << __FUNCTION__;
 
   HRESULT hr = S_OK;
   UINT count = 0;
@@ -3629,7 +3629,7 @@ int32_t AudioDeviceWindowsCore::_GetListDeviceName(EDataFlow dir,
                                                    int index,
                                                    LPWSTR szBuffer,
                                                    int bufferLen) {
-  RTC_LOG(LS_VERBOSE) << __FUNCTION__;
+  RTC_DLOG(LS_VERBOSE) << __FUNCTION__;
 
   HRESULT hr = S_OK;
   IMMDevice* pDevice = NULL;
@@ -3666,7 +3666,7 @@ int32_t AudioDeviceWindowsCore::_GetDefaultDeviceName(EDataFlow dir,
                                                       ERole role,
                                                       LPWSTR szBuffer,
                                                       int bufferLen) {
-  RTC_LOG(LS_VERBOSE) << __FUNCTION__;
+  RTC_DLOG(LS_VERBOSE) << __FUNCTION__;
 
   HRESULT hr = S_OK;
   IMMDevice* pDevice = NULL;
@@ -3703,7 +3703,7 @@ int32_t AudioDeviceWindowsCore::_GetListDeviceID(EDataFlow dir,
                                                  int index,
                                                  LPWSTR szBuffer,
                                                  int bufferLen) {
-  RTC_LOG(LS_VERBOSE) << __FUNCTION__;
+  RTC_DLOG(LS_VERBOSE) << __FUNCTION__;
 
   HRESULT hr = S_OK;
   IMMDevice* pDevice = NULL;
@@ -3740,7 +3740,7 @@ int32_t AudioDeviceWindowsCore::_GetDefaultDeviceID(EDataFlow dir,
                                                     ERole role,
                                                     LPWSTR szBuffer,
                                                     int bufferLen) {
-  RTC_LOG(LS_VERBOSE) << __FUNCTION__;
+  RTC_DLOG(LS_VERBOSE) << __FUNCTION__;
 
   HRESULT hr = S_OK;
   IMMDevice* pDevice = NULL;
@@ -3765,7 +3765,7 @@ int32_t AudioDeviceWindowsCore::_GetDefaultDeviceID(EDataFlow dir,
 int32_t AudioDeviceWindowsCore::_GetDefaultDeviceIndex(EDataFlow dir,
                                                        ERole role,
                                                        int* index) {
-  RTC_LOG(LS_VERBOSE) << __FUNCTION__;
+  RTC_DLOG(LS_VERBOSE) << __FUNCTION__;
 
   HRESULT hr = S_OK;
   WCHAR szDefaultDeviceID[MAX_PATH] = {0};
@@ -3838,7 +3838,7 @@ int32_t AudioDeviceWindowsCore::_GetDefaultDeviceIndex(EDataFlow dir,
 int32_t AudioDeviceWindowsCore::_GetDeviceName(IMMDevice* pDevice,
                                                LPWSTR pszBuffer,
                                                int bufferLen) {
-  RTC_LOG(LS_VERBOSE) << __FUNCTION__;
+  RTC_DLOG(LS_VERBOSE) << __FUNCTION__;
 
   static const WCHAR szDefault[] = L"<Device not available>";
 
@@ -3905,7 +3905,7 @@ int32_t AudioDeviceWindowsCore::_GetDeviceName(IMMDevice* pDevice,
 int32_t AudioDeviceWindowsCore::_GetDeviceID(IMMDevice* pDevice,
                                              LPWSTR pszBuffer,
                                              int bufferLen) {
-  RTC_LOG(LS_VERBOSE) << __FUNCTION__;
+  RTC_DLOG(LS_VERBOSE) << __FUNCTION__;
 
   static const WCHAR szDefault[] = L"<Device not available>";
 
@@ -3938,7 +3938,7 @@ int32_t AudioDeviceWindowsCore::_GetDeviceID(IMMDevice* pDevice,
 int32_t AudioDeviceWindowsCore::_GetDefaultDevice(EDataFlow dir,
                                                   ERole role,
                                                   IMMDevice** ppDevice) {
-  RTC_LOG(LS_VERBOSE) << __FUNCTION__;
+  RTC_DLOG(LS_VERBOSE) << __FUNCTION__;
 
   HRESULT hr(S_OK);
 
@@ -3983,6 +3983,8 @@ int32_t AudioDeviceWindowsCore::_GetListDevice(EDataFlow dir,
     return -1;
   }
 
+  SAFE_RELEASE(pCollection);
+
   return 0;
 }
 
@@ -3992,7 +3994,7 @@ int32_t AudioDeviceWindowsCore::_GetListDevice(EDataFlow dir,
 
 int32_t AudioDeviceWindowsCore::_EnumerateEndpointDevicesAll(
     EDataFlow dataFlow) const {
-  RTC_LOG(LS_VERBOSE) << __FUNCTION__;
+  RTC_DLOG(LS_VERBOSE) << __FUNCTION__;
 
   assert(_ptrEnumerator != NULL);
 

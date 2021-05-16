@@ -60,6 +60,12 @@ declare_args() {
   # provided.
   rtc_exclude_metrics_default = build_with_chromium
 
+  # Setting this to true will define WEBRTC_EXCLUDE_SYSTEM_TIME which
+  # will tell the pre-processor to remove the default definition of the
+  # SystemTimeNanos() which is defined in rtc_base/system_time.cc. In
+  # that case a new implementation needs to be provided.
+  rtc_exclude_system_time = build_with_chromium
+
   # Setting this to false will require the API user to pass in their own
   # SSLCertificateVerifier to verify the certificates presented from a
   # TLS-TURN server. In return disabling this saves around 100kb in the binary.
@@ -119,8 +125,8 @@ declare_args() {
   rtc_link_pipewire = false
 
   # Set this to use certain PipeWire version
-  # Currently we support PipeWire 0.2 (default) and PipeWire 0.3
-  rtc_pipewire_version = "0.2"
+  # Currently WebRTC supports PipeWire 0.2 and PipeWire 0.3 (default)
+  rtc_pipewire_version = "0.3"
 
   # Enable to use the Mozilla internal settings.
   build_with_mozilla = false
@@ -259,7 +265,8 @@ declare_args() {
     rtc_enable_avx2 = false
   }
 
-  # Include tests in standalone checkout.
+  # Set this to true to build the unit tests.
+  # Disabled when building with Chromium or Mozilla.
   rtc_include_tests = !build_with_chromium && !build_with_mozilla
 
   # Set this to false to skip building code that also requires X11 extensions
@@ -474,6 +481,30 @@ template("rtc_test") {
     if (is_ios && target_cpu == "x64" && rtc_include_tests) {
       if (!defined(invoker.is_xctest) || !invoker.is_xctest) {
         xctest_module_target = "//base/test:google_test_runner"
+      }
+    }
+
+    # If absl_deps is [], no action is needed. If not [], then it needs to be
+    # converted to //third_party/abseil-cpp:absl when build_with_chromium=true
+    # otherwise it just needs to be added to deps.
+    if (defined(absl_deps) && absl_deps != []) {
+      if (!defined(deps)) {
+        deps = []
+      }
+      if (build_with_chromium) {
+        deps += [ "//third_party/abseil-cpp:absl" ]
+      } else {
+        deps += absl_deps
+      }
+    }
+
+    if (using_sanitizer) {
+      if (is_linux) {
+        if (!defined(invoker.data)) {
+          data = []
+        }
+        data +=
+            [ "//third_party/llvm-build/Release+Asserts/lib/libstdc++.so.6" ]
       }
     }
   }

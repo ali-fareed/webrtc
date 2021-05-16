@@ -98,6 +98,12 @@ configuration untouched (stored in the args.gn file), do:
 $ gn clean out/Default
 ```
 
+To build the fuzzers residing in the [test/fuzzers][fuzzers] directory, use
+```
+$ gn gen out/fuzzers --args='use_libfuzzer=true optimize_for_fuzzing=true'
+```
+Depending on the fuzzer additional arguments like `is_asan`, `is_msan` or `is_ubsan_security` might be required.
+
 See the [GN][gn-doc] documentation for all available options. There are also more
 platform specific tips on the [Android][webrtc-android-development] and
 [iOS][webrtc-ios-development] instructions.
@@ -112,6 +118,14 @@ For [Ninja][ninja] project files generated in `out/Default`:
 ```
 $ ninja -C out/Default
 ```
+
+To build everything in the generated folder (`out/Default`):
+
+```
+$ ninja all -C out/Default
+```
+
+See [Ninja build rules][ninja-build-rules] to read more about difference between `ninja` and `ninja all`.
 
 
 ## Using Another Build System
@@ -256,6 +270,7 @@ Target name `turnserver`. Used for unit tests.
 
 
 [ninja]: https://ninja-build.org/
+[ninja-build-rules]: https://gn.googlesource.com/gn/+/master/docs/reference.md#the-all-and-default-rules
 [gn]: https://gn.googlesource.com/gn/+/master/README.md
 [gn-doc]: https://gn.googlesource.com/gn/+/master/docs/reference.md#IDE-options
 [webrtc-android-development]: https://webrtc.googlesource.com/src/+/refs/heads/master/docs/native-code/android/index.md
@@ -268,3 +283,4 @@ Target name `turnserver`. Used for unit tests.
 [rfc-5766]: https://tools.ietf.org/html/rfc5766
 [m80-log]: https://webrtc.googlesource.com/src/+log/branch-heads/3987
 [m80]: https://webrtc.googlesource.com/src/+/branch-heads/3987
+[fuzzers]: https://chromium.googlesource.com/external/webrtc/+/refs/heads/master/test/fuzzers/
