@@ -91,7 +91,8 @@ static const NSInteger kMaxInflightBuffers = 1;
   __kindof MTKView *_view;
 
   // Controller.
-  dispatch_semaphore_t _inflight_semaphore;
+  //dispatch_semaphore_t _inflight_semaphore;
+  bool _renderingBusy;
 
   // Renderer.
   id<MTLDevice> _device;
@@ -116,7 +117,8 @@ static const NSInteger kMaxInflightBuffers = 1;
 
 - (instancetype)init {
   if (self = [super init]) {
-    _inflight_semaphore = dispatch_semaphore_create(kMaxInflightBuffers);
+    //_inflight_semaphore = dispatch_semaphore_create(kMaxInflightBuffers);
+    _renderingBusy = false;
   }
 
   return self;
@@ -277,10 +279,19 @@ static const NSInteger kMaxInflightBuffers = 1;
   id<MTLCommandBuffer> commandBuffer = [_commandQueue commandBuffer];
   commandBuffer.label = commandBufferLabel;
 
-  __block dispatch_semaphore_t block_semaphore = _inflight_semaphore;
+  //__block dispatch_semaphore_t block_semaphore = _inflight_semaphore;
+  _renderingBusy = true;
+  __weak RTCMTLRenderer *weakSelf = self;
   [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> _Nonnull) {
     // GPU work completed.
-    dispatch_semaphore_signal(block_semaphore);
+    //dispatch_semaphore_signal(block_semaphore);
+      dispatch_async(dispatch_get_main_queue(), ^{
+          __strong RTCMTLRenderer *strongSelf = weakSelf;
+          if (!strongSelf) {
+              return;
+          }
+          strongSelf->_renderingBusy = false;
+      });
   }];
 
   MTLRenderPassDescriptor *renderPassDescriptor = _view.currentRenderPassDescriptor;
@@ -315,12 +326,15 @@ static const NSInteger kMaxInflightBuffers = 1;
   @autoreleasepool {
     // Wait until the inflight (curently sent to GPU) command buffer
     // has completed the GPU work.
-    dispatch_semaphore_wait(_inflight_semaphore, DISPATCH_TIME_FOREVER);
+    //dispatch_semaphore_wait(_inflight_semaphore, DISPATCH_TIME_FOREVER);
+      if (_renderingBusy) {
+          return;
+      }
 
     if ([self setupTexturesForFrame:frame]) {
       [self render];
     } else {
-      dispatch_semaphore_signal(_inflight_semaphore);
+      //dispatch_semaphore_signal(_inflight_semaphore);
     }
   }
 }
