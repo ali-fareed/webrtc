@@ -129,6 +129,11 @@ VideoCodec CreateDecoderVideoCodec(const VideoReceiveStream::Decoder& decoder) {
     associated_codec.codecType = kVideoCodecMultiplex;
     return associated_codec;
   }
+#ifndef DISABLE_H265
+  else if (codec.codecType == kVideoCodecH265) {
+    *(codec.H265()) = VideoEncoder::GetDefaultH265Settings();
+  }
+#endif
 
   FieldTrialOptional<int> width("w");
   FieldTrialOptional<int> height("h");
