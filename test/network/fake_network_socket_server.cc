@@ -185,7 +185,7 @@ int FakeNetworkSocket::Recv(void* pv, size_t cb, int64_t* timestamp) {
   return RecvFrom(pv, cb, &paddr, timestamp);
 }
 
-// Reads 1 packet from internal queue. Reads up to |cb| bytes into |pv|
+// Reads 1 packet from internal queue. Reads up to `cb` bytes into `pv`
 // and returns the length of received packet.
 int FakeNetworkSocket::RecvFrom(void* pv,
                                 size_t cb,
@@ -276,10 +276,6 @@ FakeNetworkSocketServer::FakeNetworkSocketServer(
       wakeup_(/*manual_reset=*/false, /*initially_signaled=*/false) {}
 FakeNetworkSocketServer::~FakeNetworkSocketServer() = default;
 
-void FakeNetworkSocketServer::OnMessageQueueDestroyed() {
-  thread_ = nullptr;
-}
-
 EmulatedEndpointImpl* FakeNetworkSocketServer::GetEndpointNode(
     const rtc::IPAddress& ip) {
   return endpoints_container_->LookupByLocalAddress(ip);
@@ -311,10 +307,6 @@ rtc::AsyncSocket* FakeNetworkSocketServer::CreateAsyncSocket(int family,
 
 void FakeNetworkSocketServer::SetMessageQueue(rtc::Thread* thread) {
   thread_ = thread;
-  if (thread_) {
-    thread_->SignalQueueDestroyed.connect(
-        this, &FakeNetworkSocketServer::OnMessageQueueDestroyed);
-  }
 }
 
 // Always returns true (if return false, it won't be invoked again...)

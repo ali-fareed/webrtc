@@ -36,6 +36,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.appspot.apprtc.AppRTCClient.SignalingParameters;
 import org.appspot.apprtc.RecordedAudioToFileController;
+import org.webrtc.AddIceObserver;
 import org.webrtc.AudioSource;
 import org.webrtc.AudioTrack;
 import org.webrtc.CameraVideoCapturer;
@@ -94,6 +95,8 @@ public class PeerConnectionClient {
   private static final String VIDEO_CODEC_H264 = "H264";
   private static final String VIDEO_CODEC_H264_BASELINE = "H264 Baseline";
   private static final String VIDEO_CODEC_H264_HIGH = "H264 High";
+  private static final String VIDEO_CODEC_AV1 = "AV1";
+  private static final String VIDEO_CODEC_AV1_SDP_CODEC_NAME = "AV1X";
   private static final String AUDIO_CODEC_OPUS = "opus";
   private static final String AUDIO_CODEC_ISAC = "ISAC";
   private static final String VIDEO_CODEC_PARAM_START_BITRATE = "x-google-start-bitrate";
@@ -319,7 +322,7 @@ public class PeerConnectionClient {
 
   /**
    * Create a PeerConnectionClient with the specified parameters. PeerConnectionClient takes
-   * ownership of |eglBase|.
+   * ownership of `eglBase`.
    */
   public PeerConnectionClient(Context appContext, EglBase eglBase,
       PeerConnectionParameters peerConnectionParameters, PeerConnectionEvents events) {
@@ -617,7 +620,7 @@ public class PeerConnectionClient {
     isInitiator = false;
 
     // Set INFO libjingle logging.
-    // NOTE: this _must_ happen while |factory| is alive!
+    // NOTE: this _must_ happen while `factory` is alive!
     Logging.enableLogToDebugOutput(Logging.Severity.LS_INFO);
 
     List<String> mediaStreamLabels = Collections.singletonList("ARDAMS");
@@ -824,7 +827,16 @@ public class PeerConnectionClient {
         if (queuedRemoteCandidates != null) {
           queuedRemoteCandidates.add(candidate);
         } else {
-          peerConnection.addIceCandidate(candidate);
+          peerConnection.addIceCandidate(candidate, new AddIceObserver() {
+            @Override
+            public void onAddSuccess() {
+              Log.d(TAG, "Candidate " + candidate + " successfully added.");
+            }
+            @Override
+            public void onAddFailure(String error) {
+              Log.d(TAG, "Candidate " + candidate + " addition failed: " + error);
+            }
+          });
         }
       }
     });
@@ -976,6 +988,8 @@ public class PeerConnectionClient {
         return VIDEO_CODEC_VP8;
       case VIDEO_CODEC_VP9:
         return VIDEO_CODEC_VP9;
+      case VIDEO_CODEC_AV1:
+        return VIDEO_CODEC_AV1_SDP_CODEC_NAME;
       case VIDEO_CODEC_H264_HIGH:
       case VIDEO_CODEC_H264_BASELINE:
         return VIDEO_CODEC_H264;
@@ -1101,7 +1115,7 @@ public class PeerConnectionClient {
     final List<String> unpreferredPayloadTypes =
         new ArrayList<>(origLineParts.subList(3, origLineParts.size()));
     unpreferredPayloadTypes.removeAll(preferredPayloadTypes);
-    // Reconstruct the line with |preferredPayloadTypes| moved to the beginning of the payload
+    // Reconstruct the line with `preferredPayloadTypes` moved to the beginning of the payload
     // types.
     final List<String> newLineParts = new ArrayList<>();
     newLineParts.addAll(header);
@@ -1117,7 +1131,7 @@ public class PeerConnectionClient {
       Log.w(TAG, "No mediaDescription line, so can't prefer " + codec);
       return sdp;
     }
-    // A list with all the payload types with name |codec|. The payload types are integers in the
+    // A list with all the payload types with name `codec`. The payload types are integers in the
     // range 96-127, but they are stored as strings here.
     final List<String> codecPayloadTypes = new ArrayList<>();
     // a=rtpmap:<payload type> <encoding name>/<clock rate> [/<encoding parameters>]
@@ -1146,7 +1160,16 @@ public class PeerConnectionClient {
     if (queuedRemoteCandidates != null) {
       Log.d(TAG, "Add " + queuedRemoteCandidates.size() + " remote candidates");
       for (IceCandidate candidate : queuedRemoteCandidates) {
-        peerConnection.addIceCandidate(candidate);
+        peerConnection.addIceCandidate(candidate, new AddIceObserver() {
+          @Override
+          public void onAddSuccess() {
+            Log.d(TAG, "Candidate " + candidate + " successfully added.");
+          }
+          @Override
+          public void onAddFailure(String error) {
+            Log.d(TAG, "Candidate " + candidate + " addition failed: " + error);
+          }
+        });
       }
       queuedRemoteCandidates = null;
     }
@@ -1293,6 +1316,9 @@ public class PeerConnectionClient {
 
     @Override
     public void onAddTrack(final RtpReceiver receiver, final MediaStream[] mediaStreams) {}
+
+    @Override
+    public void onRemoveTrack(final RtpReceiver receiver) {}
   }
 
   // Implementation detail: handle offer creation/signaling and answer setting,

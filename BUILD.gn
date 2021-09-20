@@ -121,6 +121,9 @@ config("common_inherited_config") {
   if (rtc_enable_symbol_export || is_component_build) {
     defines = [ "WEBRTC_ENABLE_SYMBOL_EXPORT" ]
   }
+  if (rtc_enable_objc_symbol_export) {
+    defines = [ "WEBRTC_ENABLE_OBJC_SYMBOL_EXPORT" ]
+  }
 
   if (build_with_mozilla) {
     defines += [ "WEBRTC_MOZILLA_BUILD" ]
@@ -136,6 +139,10 @@ config("common_inherited_config") {
 
   if (rtc_enable_avx2) {
     defines += [ "WEBRTC_ENABLE_AVX2" ]
+  }
+
+  if (rtc_enable_win_wgc) {
+    defines += [ "RTC_ENABLE_WIN_WGC" ]
   }
 
   # Some tests need to declare their own trace event handlers. If this define is
@@ -359,9 +366,6 @@ config("common_config") {
     if (is_clang) {
       cflags += [
         "-Wc++11-narrowing",
-        "-Wimplicit-fallthrough",
-        "-Wthread-safety",
-        "-Winconsistent-missing-override",
         "-Wundef",
       ]
 
@@ -372,6 +376,13 @@ config("common_config") {
         # Flags NaCl (Clang 3.7) and Xcode 7.3 (Clang clang-703.0.31) do not
         # recognize.
         cflags += [ "-Wunused-lambda-capture" ]
+      }
+
+      if (use_xcode_clang) {
+        # This may be removed if the clang version in xcode > 12.4 includes the
+        # fix https://reviews.llvm.org/D73007.
+        # https://bugs.llvm.org/show_bug.cgi?id=44556
+        cflags += [ "-Wno-range-loop-analysis" ]
       }
     }
 
@@ -447,10 +458,6 @@ config("common_config") {
 
 config("common_objc") {
   frameworks = [ "Foundation.framework" ]
-
-  if (rtc_use_metal_rendering) {
-    defines = [ "RTC_SUPPORTS_METAL" ]
-  }
 }
 
 if (!build_with_chromium) {
@@ -534,6 +541,10 @@ if (!build_with_chromium) {
   if (rtc_include_tests && !is_asan) {
     rtc_executable("webrtc_lib_link_test") {
       testonly = true
+
+      # This target is used for checking to link, so do not check dependencies
+      # on gn check.
+      check_includes = false  # no-presubmit-check TODO(bugs.webrtc.org/12785)
 
       sources = [ "webrtc_lib_link_test.cc" ]
       deps = [

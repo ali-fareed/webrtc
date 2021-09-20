@@ -8,6 +8,8 @@
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
+#include "test/pc/e2e/analyzer/video/default_video_quality_analyzer.h"
+
 #include <algorithm>
 #include <map>
 #include <memory>
@@ -24,7 +26,7 @@
 #include "rtc_tools/frame_analyzer/video_geometry_aligner.h"
 #include "system_wrappers/include/sleep.h"
 #include "test/gtest.h"
-#include "test/pc/e2e/analyzer/video/default_video_quality_analyzer.h"
+#include "test/pc/e2e/analyzer/video/default_video_quality_analyzer_shared_objects.h"
 
 namespace webrtc {
 namespace webrtc_pc_e2e {
@@ -63,13 +65,13 @@ VideoFrame NextFrame(test::FrameGeneratorInterface* frame_generator,
 EncodedImage FakeEncode(const VideoFrame& frame) {
   EncodedImage image;
   std::vector<RtpPacketInfo> packet_infos;
-  packet_infos.push_back(
-      RtpPacketInfo(/*ssrc=*/1,
-                    /*csrcs=*/{},
-                    /*rtp_timestamp=*/frame.timestamp(),
-                    /*audio_level=*/absl::nullopt,
-                    /*absolute_capture_time=*/absl::nullopt,
-                    /*receive_time_ms=*/frame.timestamp_us() + 10));
+  packet_infos.push_back(RtpPacketInfo(
+      /*ssrc=*/1,
+      /*csrcs=*/{},
+      /*rtp_timestamp=*/frame.timestamp(),
+      /*audio_level=*/absl::nullopt,
+      /*absolute_capture_time=*/absl::nullopt,
+      /*receive_time=*/Timestamp::Micros(frame.timestamp_us() + 10000)));
   image.SetPacketInfos(RtpPacketInfos(packet_infos));
   return image;
 }
@@ -760,6 +762,11 @@ TEST(DefaultVideoQualityAnalyzerTest, RuntimeParticipantsAdding) {
   constexpr char kAlice[] = "alice";
   constexpr char kBob[] = "bob";
   constexpr char kCharlie[] = "charlie";
+  constexpr char kKatie[] = "katie";
+
+  constexpr int kFramesCount = 9;
+  constexpr int kOneThirdFrames = kFramesCount / 3;
+  constexpr int kTwoThirdFrames = 2 * kOneThirdFrames;
 
   DefaultVideoQualityAnalyzer analyzer(Clock::GetRealTimeClock(),
                                        AnalyzerOptionsForTest());
@@ -769,7 +776,9 @@ TEST(DefaultVideoQualityAnalyzerTest, RuntimeParticipantsAdding) {
   std::vector<uint16_t> frames_order;
   analyzer.RegisterParticipantInCall(kAlice);
   analyzer.RegisterParticipantInCall(kBob);
-  for (int i = 0; i < kMaxFramesInFlightPerStream; ++i) {
+
+  // Alice is sending frames.
+  for (int i = 0; i < kFramesCount; ++i) {
     VideoFrame frame = NextFrame(frame_generator.get(), i);
     frame.set_id(analyzer.OnFrameCaptured(kAlice, kStreamLabel, frame));
     frames_order.push_back(frame.id());
@@ -779,7 +788,8 @@ TEST(DefaultVideoQualityAnalyzerTest, RuntimeParticipantsAdding) {
                             VideoQualityAnalyzerInterface::EncoderStats());
   }
 
-  for (size_t i = 0; i < frames_order.size() / 2; ++i) {
+  // Bob receives one third of the sent frames.
+  for (int i = 0; i < kOneThirdFrames; ++i) {
     uint16_t frame_id = frames_order.at(i);
     VideoFrame received_frame = DeepCopy(captured_frames.at(frame_id));
     analyzer.OnFramePreDecode(kBob, received_frame.id(),
@@ -790,8 +800,11 @@ TEST(DefaultVideoQualityAnalyzerTest, RuntimeParticipantsAdding) {
   }
 
   analyzer.RegisterParticipantInCall(kCharlie);
+  analyzer.RegisterParticipantInCall(kKatie);
 
-  for (size_t i = frames_order.size() / 2; i < frames_order.size(); ++i) {
+  // New participants were dynamically added. Bob and Charlie receive second
+  // third of the sent frames. Katie drops the frames.
+  for (int i = kOneThirdFrames; i < kTwoThirdFrames; ++i) {
     uint16_t frame_id = frames_order.at(i);
     VideoFrame bob_received_frame = DeepCopy(captured_frames.at(frame_id));
     analyzer.OnFramePreDecode(kBob, bob_received_frame.id(),
@@ -808,6 +821,31 @@ TEST(DefaultVideoQualityAnalyzerTest, RuntimeParticipantsAdding) {
     analyzer.OnFrameRendered(kCharlie, charlie_received_frame);
   }
 
+  // Bob, Charlie and Katie receive the rest of the sent frames.
+  for (int i = kTwoThirdFrames; i < kFramesCount; ++i) {
+    uint16_t frame_id = frames_order.at(i);
+    VideoFrame bob_received_frame = DeepCopy(captured_frames.at(frame_id));
+    analyzer.OnFramePreDecode(kBob, bob_received_frame.id(),
+                              FakeEncode(bob_received_frame));
+    analyzer.OnFrameDecoded(kBob, bob_received_frame,
+                            VideoQualityAnalyzerInterface::DecoderStats());
+    analyzer.OnFrameRendered(kBob, bob_received_frame);
+
+    VideoFrame charlie_received_frame = DeepCopy(captured_frames.at(frame_id));
+    analyzer.OnFramePreDecode(kCharlie, charlie_received_frame.id(),
+                              FakeEncode(charlie_received_frame));
+    analyzer.OnFrameDecoded(kCharlie, charlie_received_frame,
+                            VideoQualityAnalyzerInterface::DecoderStats());
+    analyzer.OnFrameRendered(kCharlie, charlie_received_frame);
+
+    VideoFrame katie_received_frame = DeepCopy(captured_frames.at(frame_id));
+    analyzer.OnFramePreDecode(kKatie, katie_received_frame.id(),
+                              FakeEncode(katie_received_frame));
+    analyzer.OnFrameDecoded(kKatie, katie_received_frame,
+                            VideoQualityAnalyzerInterface::DecoderStats());
+    analyzer.OnFrameRendered(kKatie, katie_received_frame);
+  }
+
   // Give analyzer some time to process frames on async thread. The computations
   // have to be fast (heavy metrics are disabled!), so if doesn't fit 100ms it
   // means we have an issue!
@@ -816,8 +854,7 @@ TEST(DefaultVideoQualityAnalyzerTest, RuntimeParticipantsAdding) {
 
   AnalyzerStats stats = analyzer.GetAnalyzerStats();
   EXPECT_EQ(stats.memory_overloaded_comparisons_done, 0);
-  EXPECT_EQ(stats.comparisons_done,
-            kMaxFramesInFlightPerStream + kMaxFramesInFlightPerStream / 2);
+  EXPECT_EQ(stats.comparisons_done, kFramesCount + 2 * kTwoThirdFrames);
 
   std::vector<StatsSample> frames_in_flight_sizes =
       GetSortedSamples(stats.frames_in_flight_left_count);
@@ -825,38 +862,262 @@ TEST(DefaultVideoQualityAnalyzerTest, RuntimeParticipantsAdding) {
       << ToString(frames_in_flight_sizes);
 
   FrameCounters frame_counters = analyzer.GetGlobalCounters();
-  EXPECT_EQ(frame_counters.captured, kMaxFramesInFlightPerStream);
-  EXPECT_EQ(frame_counters.received,
-            kMaxFramesInFlightPerStream + kMaxFramesInFlightPerStream / 2);
-  EXPECT_EQ(frame_counters.decoded,
-            kMaxFramesInFlightPerStream + kMaxFramesInFlightPerStream / 2);
-  EXPECT_EQ(frame_counters.rendered,
-            kMaxFramesInFlightPerStream + kMaxFramesInFlightPerStream / 2);
-  EXPECT_EQ(frame_counters.dropped, 0);
+  EXPECT_EQ(frame_counters.captured, kFramesCount);
+  EXPECT_EQ(frame_counters.received, 2 * kFramesCount);
+  EXPECT_EQ(frame_counters.decoded, 2 * kFramesCount);
+  EXPECT_EQ(frame_counters.rendered, 2 * kFramesCount);
+  EXPECT_EQ(frame_counters.dropped, kOneThirdFrames);
 
-  EXPECT_EQ(analyzer.GetKnownVideoStreams().size(), 2lu);
+  EXPECT_EQ(analyzer.GetKnownVideoStreams().size(), 3lu);
   const StatsKey kAliceBobStats(kStreamLabel, kAlice, kBob);
   const StatsKey kAliceCharlieStats(kStreamLabel, kAlice, kCharlie);
+  const StatsKey kAliceKatieStats(kStreamLabel, kAlice, kKatie);
   {
     FrameCounters stream_conters =
         analyzer.GetPerStreamCounters().at(kAliceBobStats);
-    EXPECT_EQ(stream_conters.captured, 10);
-    EXPECT_EQ(stream_conters.pre_encoded, 10);
-    EXPECT_EQ(stream_conters.encoded, 10);
-    EXPECT_EQ(stream_conters.received, 10);
-    EXPECT_EQ(stream_conters.decoded, 10);
-    EXPECT_EQ(stream_conters.rendered, 10);
+    EXPECT_EQ(stream_conters.captured, kFramesCount);
+    EXPECT_EQ(stream_conters.pre_encoded, kFramesCount);
+    EXPECT_EQ(stream_conters.encoded, kFramesCount);
+    EXPECT_EQ(stream_conters.received, kFramesCount);
+    EXPECT_EQ(stream_conters.decoded, kFramesCount);
+    EXPECT_EQ(stream_conters.rendered, kFramesCount);
   }
   {
     FrameCounters stream_conters =
         analyzer.GetPerStreamCounters().at(kAliceCharlieStats);
-    EXPECT_EQ(stream_conters.captured, 5);
-    EXPECT_EQ(stream_conters.pre_encoded, 5);
-    EXPECT_EQ(stream_conters.encoded, 5);
-    EXPECT_EQ(stream_conters.received, 5);
-    EXPECT_EQ(stream_conters.decoded, 5);
-    EXPECT_EQ(stream_conters.rendered, 5);
+    EXPECT_EQ(stream_conters.captured, kFramesCount);
+    EXPECT_EQ(stream_conters.pre_encoded, kFramesCount);
+    EXPECT_EQ(stream_conters.encoded, kFramesCount);
+    EXPECT_EQ(stream_conters.received, kTwoThirdFrames);
+    EXPECT_EQ(stream_conters.decoded, kTwoThirdFrames);
+    EXPECT_EQ(stream_conters.rendered, kTwoThirdFrames);
   }
+  {
+    FrameCounters stream_conters =
+        analyzer.GetPerStreamCounters().at(kAliceKatieStats);
+    EXPECT_EQ(stream_conters.captured, kFramesCount);
+    EXPECT_EQ(stream_conters.pre_encoded, kFramesCount);
+    EXPECT_EQ(stream_conters.encoded, kFramesCount);
+    EXPECT_EQ(stream_conters.received, kOneThirdFrames);
+    EXPECT_EQ(stream_conters.decoded, kOneThirdFrames);
+    EXPECT_EQ(stream_conters.rendered, kOneThirdFrames);
+  }
+}
+
+TEST(DefaultVideoQualityAnalyzerTest,
+     SimulcastFrameWasFullyReceivedByAllPeersBeforeEncodeFinish) {
+  std::unique_ptr<test::FrameGeneratorInterface> frame_generator =
+      test::CreateSquareFrameGenerator(kFrameWidth, kFrameHeight,
+                                       /*type=*/absl::nullopt,
+                                       /*num_squares=*/absl::nullopt);
+
+  DefaultVideoQualityAnalyzer analyzer(Clock::GetRealTimeClock(),
+                                       AnalyzerOptionsForTest());
+  constexpr char kAlice[] = "alice";
+  constexpr char kBob[] = "bob";
+  constexpr char kCharlie[] = "charlie";
+  analyzer.Start("test_case", std::vector<std::string>{kAlice, kBob, kCharlie},
+                 kAnalyzerMaxThreadsCount);
+
+  VideoFrame frame = NextFrame(frame_generator.get(), 1);
+
+  frame.set_id(analyzer.OnFrameCaptured(kAlice, kStreamLabel, frame));
+  analyzer.OnFramePreEncode(kAlice, frame);
+  // Encode 1st simulcast layer
+  analyzer.OnFrameEncoded(kAlice, frame.id(), FakeEncode(frame),
+                          VideoQualityAnalyzerInterface::EncoderStats());
+
+  // Receive by Bob
+  VideoFrame received_frame = DeepCopy(frame);
+  analyzer.OnFramePreDecode(kBob, received_frame.id(),
+                            FakeEncode(received_frame));
+  analyzer.OnFrameDecoded(kBob, received_frame,
+                          VideoQualityAnalyzerInterface::DecoderStats());
+  analyzer.OnFrameRendered(kBob, received_frame);
+  // Receive by Charlie
+  received_frame = DeepCopy(frame);
+  analyzer.OnFramePreDecode(kCharlie, received_frame.id(),
+                            FakeEncode(received_frame));
+  analyzer.OnFrameDecoded(kCharlie, received_frame,
+                          VideoQualityAnalyzerInterface::DecoderStats());
+  analyzer.OnFrameRendered(kCharlie, received_frame);
+
+  // Encode 2nd simulcast layer
+  analyzer.OnFrameEncoded(kAlice, frame.id(), FakeEncode(frame),
+                          VideoQualityAnalyzerInterface::EncoderStats());
+
+  // Give analyzer some time to process frames on async thread. The computations
+  // have to be fast (heavy metrics are disabled!), so if doesn't fit 100ms it
+  // means we have an issue!
+  SleepMs(100);
+  analyzer.Stop();
+
+  AnalyzerStats stats = analyzer.GetAnalyzerStats();
+  EXPECT_EQ(stats.comparisons_done, 2);
+
+  std::vector<StatsSample> frames_in_flight_sizes =
+      GetSortedSamples(stats.frames_in_flight_left_count);
+  EXPECT_EQ(frames_in_flight_sizes.back().value, 0)
+      << ToString(frames_in_flight_sizes);
+
+  FrameCounters frame_counters = analyzer.GetGlobalCounters();
+  EXPECT_EQ(frame_counters.captured, 1);
+  EXPECT_EQ(frame_counters.rendered, 2);
+}
+
+TEST(DefaultVideoQualityAnalyzerTest, FrameCanBeReceivedBySender) {
+  std::unique_ptr<test::FrameGeneratorInterface> frame_generator =
+      test::CreateSquareFrameGenerator(kFrameWidth, kFrameHeight,
+                                       /*type=*/absl::nullopt,
+                                       /*num_squares=*/absl::nullopt);
+
+  DefaultVideoQualityAnalyzerOptions options = AnalyzerOptionsForTest();
+  options.enable_receive_own_stream = true;
+  DefaultVideoQualityAnalyzer analyzer(Clock::GetRealTimeClock(), options);
+  analyzer.Start("test_case",
+                 std::vector<std::string>{kSenderPeerName, kReceiverPeerName},
+                 kAnalyzerMaxThreadsCount);
+
+  VideoFrame frame = NextFrame(frame_generator.get(), 1);
+
+  frame.set_id(analyzer.OnFrameCaptured(kSenderPeerName, kStreamLabel, frame));
+  analyzer.OnFramePreEncode(kSenderPeerName, frame);
+  analyzer.OnFrameEncoded(kSenderPeerName, frame.id(), FakeEncode(frame),
+                          VideoQualityAnalyzerInterface::EncoderStats());
+
+  // Receive by 2nd peer.
+  VideoFrame received_frame = DeepCopy(frame);
+  analyzer.OnFramePreDecode(kReceiverPeerName, received_frame.id(),
+                            FakeEncode(received_frame));
+  analyzer.OnFrameDecoded(kReceiverPeerName, received_frame,
+                          VideoQualityAnalyzerInterface::DecoderStats());
+  analyzer.OnFrameRendered(kReceiverPeerName, received_frame);
+
+  // Check that we still have that frame in flight.
+  AnalyzerStats analyzer_stats = analyzer.GetAnalyzerStats();
+  std::vector<StatsSample> frames_in_flight_sizes =
+      GetSortedSamples(analyzer_stats.frames_in_flight_left_count);
+  EXPECT_EQ(frames_in_flight_sizes.back().value, 1)
+      << "Expected that frame is still in flight, "
+      << "because it wasn't received by sender"
+      << ToString(frames_in_flight_sizes);
+
+  // Receive by sender
+  received_frame = DeepCopy(frame);
+  analyzer.OnFramePreDecode(kSenderPeerName, received_frame.id(),
+                            FakeEncode(received_frame));
+  analyzer.OnFrameDecoded(kSenderPeerName, received_frame,
+                          VideoQualityAnalyzerInterface::DecoderStats());
+  analyzer.OnFrameRendered(kSenderPeerName, received_frame);
+
+  // Give analyzer some time to process frames on async thread. The computations
+  // have to be fast (heavy metrics are disabled!), so if doesn't fit 100ms it
+  // means we have an issue!
+  SleepMs(100);
+  analyzer.Stop();
+
+  analyzer_stats = analyzer.GetAnalyzerStats();
+  EXPECT_EQ(analyzer_stats.comparisons_done, 2);
+
+  frames_in_flight_sizes =
+      GetSortedSamples(analyzer_stats.frames_in_flight_left_count);
+  EXPECT_EQ(frames_in_flight_sizes.back().value, 0)
+      << ToString(frames_in_flight_sizes);
+
+  FrameCounters frame_counters = analyzer.GetGlobalCounters();
+  EXPECT_EQ(frame_counters.captured, 1);
+  EXPECT_EQ(frame_counters.rendered, 2);
+
+  EXPECT_EQ(analyzer.GetStats().size(), 2lu);
+  {
+    FrameCounters stream_conters = analyzer.GetPerStreamCounters().at(
+        StatsKey(kStreamLabel, kSenderPeerName, kReceiverPeerName));
+    EXPECT_EQ(stream_conters.captured, 1);
+    EXPECT_EQ(stream_conters.pre_encoded, 1);
+    EXPECT_EQ(stream_conters.encoded, 1);
+    EXPECT_EQ(stream_conters.received, 1);
+    EXPECT_EQ(stream_conters.decoded, 1);
+    EXPECT_EQ(stream_conters.rendered, 1);
+  }
+  {
+    FrameCounters stream_conters = analyzer.GetPerStreamCounters().at(
+        StatsKey(kStreamLabel, kSenderPeerName, kSenderPeerName));
+    EXPECT_EQ(stream_conters.captured, 1);
+    EXPECT_EQ(stream_conters.pre_encoded, 1);
+    EXPECT_EQ(stream_conters.encoded, 1);
+    EXPECT_EQ(stream_conters.received, 1);
+    EXPECT_EQ(stream_conters.decoded, 1);
+    EXPECT_EQ(stream_conters.rendered, 1);
+  }
+}
+
+TEST(DefaultVideoQualityAnalyzerTest, CodecTrackedCorrectly) {
+  std::unique_ptr<test::FrameGeneratorInterface> frame_generator =
+      test::CreateSquareFrameGenerator(kFrameWidth, kFrameHeight,
+                                       /*type=*/absl::nullopt,
+                                       /*num_squares=*/absl::nullopt);
+
+  DefaultVideoQualityAnalyzer analyzer(Clock::GetRealTimeClock(),
+                                       AnalyzerOptionsForTest());
+  analyzer.Start("test_case",
+                 std::vector<std::string>{kSenderPeerName, kReceiverPeerName},
+                 kAnalyzerMaxThreadsCount);
+
+  VideoQualityAnalyzerInterface::EncoderStats encoder_stats;
+  std::vector<std::string> codec_names = {"codec_1", "codec_2"};
+  std::vector<VideoFrame> frames;
+  // Send 3 frame for each codec.
+  for (size_t i = 0; i < codec_names.size(); ++i) {
+    for (size_t j = 0; j < 3; ++j) {
+      VideoFrame frame = NextFrame(frame_generator.get(), 3 * i + j);
+      frame.set_id(
+          analyzer.OnFrameCaptured(kSenderPeerName, kStreamLabel, frame));
+      analyzer.OnFramePreEncode(kSenderPeerName, frame);
+      encoder_stats.encoder_name = codec_names[i];
+      analyzer.OnFrameEncoded(kSenderPeerName, frame.id(), FakeEncode(frame),
+                              encoder_stats);
+      frames.push_back(std::move(frame));
+    }
+  }
+
+  // Receive 3 frame for each codec.
+  VideoQualityAnalyzerInterface::DecoderStats decoder_stats;
+  for (size_t i = 0; i < codec_names.size(); ++i) {
+    for (size_t j = 0; j < 3; ++j) {
+      VideoFrame received_frame = DeepCopy(frames[3 * i + j]);
+      analyzer.OnFramePreDecode(kReceiverPeerName, received_frame.id(),
+                                FakeEncode(received_frame));
+      decoder_stats.decoder_name = codec_names[i];
+      analyzer.OnFrameDecoded(kReceiverPeerName, received_frame, decoder_stats);
+      analyzer.OnFrameRendered(kReceiverPeerName, received_frame);
+    }
+  }
+
+  // Give analyzer some time to process frames on async thread. The computations
+  // have to be fast (heavy metrics are disabled!), so if doesn't fit 100ms it
+  // means we have an issue!
+  SleepMs(100);
+  analyzer.Stop();
+
+  std::map<StatsKey, StreamStats> stats = analyzer.GetStats();
+  ASSERT_EQ(stats.size(), 1lu);
+  const StreamStats& stream_stats =
+      stats.at(StatsKey(kStreamLabel, kSenderPeerName, kReceiverPeerName));
+  ASSERT_EQ(stream_stats.encoders.size(), 2lu);
+  EXPECT_EQ(stream_stats.encoders[0].codec_name, codec_names[0]);
+  EXPECT_EQ(stream_stats.encoders[0].first_frame_id, frames[0].id());
+  EXPECT_EQ(stream_stats.encoders[0].last_frame_id, frames[2].id());
+  EXPECT_EQ(stream_stats.encoders[1].codec_name, codec_names[1]);
+  EXPECT_EQ(stream_stats.encoders[1].first_frame_id, frames[3].id());
+  EXPECT_EQ(stream_stats.encoders[1].last_frame_id, frames[5].id());
+
+  ASSERT_EQ(stream_stats.decoders.size(), 2lu);
+  EXPECT_EQ(stream_stats.decoders[0].codec_name, codec_names[0]);
+  EXPECT_EQ(stream_stats.decoders[0].first_frame_id, frames[0].id());
+  EXPECT_EQ(stream_stats.decoders[0].last_frame_id, frames[2].id());
+  EXPECT_EQ(stream_stats.decoders[1].codec_name, codec_names[1]);
+  EXPECT_EQ(stream_stats.decoders[1].first_frame_id, frames[3].id());
+  EXPECT_EQ(stream_stats.decoders[1].last_frame_id, frames[5].id());
 }
 
 }  // namespace
