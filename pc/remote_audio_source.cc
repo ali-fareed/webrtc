@@ -99,13 +99,6 @@ void RemoteAudioSource::SetState(SourceState new_state) {
   }
 }
 
-void RemoteAudioSource::SetState(SourceState new_state) {
-  if (state_ != new_state) {
-    state_ = new_state;
-    FireOnChanged();
-  }
-}
-
 MediaSourceInterface::SourceState RemoteAudioSource::state() const {
   RTC_DCHECK_RUN_ON(main_thread_);
   return state_;
