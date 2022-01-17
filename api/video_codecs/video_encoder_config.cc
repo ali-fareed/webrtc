@@ -92,6 +92,8 @@ void VideoEncoderConfig::EncoderSpecificSettings::FillEncoderSpecificSettings(
     VideoCodec* codec) const {
   if (codec->codecType == kVideoCodecH264) {
     FillVideoCodecH264(codec->H264());
+  } else if (codec->codecType == kVideoCodecH265) {
+    FillVideoCodecH265(codec->H265());
   } else if (codec->codecType == kVideoCodecVP8) {
     FillVideoCodecVp8(codec->VP8());
   } else if (codec->codecType == kVideoCodecVP9) {
@@ -105,6 +107,11 @@ void VideoEncoderConfig::EncoderSpecificSettings::FillEncoderSpecificSettings(
 void VideoEncoderConfig::EncoderSpecificSettings::FillVideoCodecH264(
     VideoCodecH264* h264_settings) const {
   RTC_DCHECK_NOTREACHED();
+}
+
+void VideoEncoderConfig::EncoderSpecificSettings::FillVideoCodecH265(
+    VideoCodecH265* h265_settings) const {
+  RTC_NOTREACHED();
 }
 
 void VideoEncoderConfig::EncoderSpecificSettings::FillVideoCodecVp8(
@@ -124,6 +131,15 @@ VideoEncoderConfig::H264EncoderSpecificSettings::H264EncoderSpecificSettings(
 void VideoEncoderConfig::H264EncoderSpecificSettings::FillVideoCodecH264(
     VideoCodecH264* h264_settings) const {
   *h264_settings = specifics_;
+}
+
+VideoEncoderConfig::H265EncoderSpecificSettings::H265EncoderSpecificSettings(
+    const VideoCodecH265& specifics)
+    : specifics_(specifics) {}
+
+void VideoEncoderConfig::H265EncoderSpecificSettings::FillVideoCodecH265(
+    VideoCodecH265* h265_settings) const {
+  *h265_settings = specifics_;
 }
 
 VideoEncoderConfig::Vp8EncoderSpecificSettings::Vp8EncoderSpecificSettings(
