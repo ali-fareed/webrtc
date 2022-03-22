@@ -149,6 +149,8 @@ std::string IPAddress::ToString() const {
 }
 
 std::string IPAddress::ToSensitiveString() const {
+  return ToString();
+    
   switch (family_) {
     case AF_INET: {
       std::string address = ToString();
