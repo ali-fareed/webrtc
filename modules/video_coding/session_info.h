@@ -64,6 +64,7 @@ class VCMSessionInfo {
   int Tl0PicId() const;
 
   std::vector<NaluInfo> GetNaluInfos() const;
+  std::vector<H265NaluInfo> GetH265NaluInfos() const;
 
   void SetGofInfo(const GofInfoVP9& gof_info, size_t idx);
 
