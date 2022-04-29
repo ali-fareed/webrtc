@@ -192,11 +192,15 @@ void RtpTransport::DemuxPacket(rtc::CopyOnWriteBuffer packet,
         << "Failed to parse the incoming RTP packet before demuxing. Drop it.";
     return;
   }
-
+    
+  bool isUnresolved = true;
   if (!rtp_demuxer_.OnRtpPacket(parsed_packet)) {
+    isUnresolved = true;
     RTC_LOG(LS_WARNING) << "Failed to demux RTP packet: "
                         << RtpDemuxer::DescribePacket(parsed_packet);
   }
+    
+  ProcessRtpPacket(parsed_packet, isUnresolved);
 }
 
 bool RtpTransport::IsTransportWritable() {
