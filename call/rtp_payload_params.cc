@@ -411,6 +411,7 @@ absl::optional<FrameDependencyStructure> RtpPayloadParams::GenericStructure(
     }
     case VideoCodecType::kVideoCodecAV1:
     case VideoCodecType::kVideoCodecH264:
+    case VideoCodecType::kVideoCodecH265:
     case VideoCodecType::kVideoCodecMultiplex:
       return absl::nullopt;
   }
