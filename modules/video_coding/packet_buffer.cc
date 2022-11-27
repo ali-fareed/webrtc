@@ -434,7 +434,7 @@ std::vector<std::unique_ptr<PacketBuffer::Packet>> PacketBuffer::FindFrames(
         }
       }
 
-      if (is_h264 || full_frame_found) {
+      if (is_h264 || is_h265 || full_frame_found) {
         const uint16_t end_seq_num = seq_num + 1;
         // Use uint16_t type to handle sequence number wrap around case.
         uint16_t num_packets = end_seq_num - start_seq_num;
