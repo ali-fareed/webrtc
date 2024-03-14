@@ -96,11 +96,16 @@ void PopulateRtpWithCodecSpecifics(const CodecSpecificInfo& info,
           info.codecSpecific.H264.packetization_mode;
       return;
     }
+    case kVideoCodecH265: {
+      auto& h265_header = rtp->video_type_header.emplace<RTPVideoHeaderH265>();
+      h265_header.packetization_mode =
+          info.codecSpecific.H265.packetization_mode;
+    }
+    return;
     case kVideoCodecMultiplex:
     case kVideoCodecGeneric:
       rtp->codec = kVideoCodecGeneric;
       return;
-    // TODO(bugs.webrtc.org/13485): Implement H265 codec specific info
     default:
       return;
   }

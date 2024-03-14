@@ -48,5 +48,20 @@ uint32_t Log2Ceiling(uint32_t value) {
   return (value ? 32 : -1) - WebRtcVideo_CountLeadingZeros32(value - 1);
 }
 
+uint32_t Log2(uint32_t value) {
+  uint32_t result = 0;
+  // If value is not a power of two an additional bit is required
+  // to account for the ceil() of log2() below.
+  if ((value & (value - 1)) != 0) {
+    ++result;
+  }
+  while (value > 0) {
+    value >>= 1;
+    ++result;
+  }
+
+  return result;
+}
+
 }  // namespace H265
 }  // namespace webrtc

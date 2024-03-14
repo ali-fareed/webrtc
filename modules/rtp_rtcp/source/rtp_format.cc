@@ -62,7 +62,8 @@ std::unique_ptr<RtpPacketizer> RtpPacketizer::Create(
           rtp_video_header.is_last_frame_in_picture);
 #ifdef RTC_ENABLE_H265
     case kVideoCodecH265: {
-      return std::make_unique<RtpPacketizerH265>(payload, limits);
+      const auto& h265 = absl::get<RTPVideoHeaderH265>(rtp_video_header.video_type_header);
+      return std::make_unique<RtpPacketizerH265>(payload, limits, h265.packetization_mode);
     }
 #endif
     default: {

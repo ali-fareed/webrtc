@@ -185,6 +185,7 @@ class SendStatisticsProxy : public VideoStreamEncoderObserver,
     SampleCounter vp8;   // QP range: 0-127.
     SampleCounter vp9;   // QP range: 0-255.
     SampleCounter h264;  // QP range: 0-51.
+    SampleCounter h265;  // QP range: 0-51.
   };
   struct AdaptChanges {
     int down = 0;

@@ -484,6 +484,26 @@ void SendStatisticsProxy::UmaSamplesContainer::UpdateHistograms(
             << "QP stats not recorded for H264 spatial idx " << spatial_idx;
       }
     }
+    int qp_h265 = it.second.h265.Avg(kMinRequiredMetricsSamples);
+    if (qp_h265 != -1) {
+      int spatial_idx = it.first;
+      if (spatial_idx == -1) {
+        RTC_HISTOGRAMS_COUNTS_200(kIndex, uma_prefix_ + "Encoded.Qp.H265",
+                                    qp_h265);
+      } else if (spatial_idx == 0) {
+        RTC_HISTOGRAMS_COUNTS_200(kIndex, uma_prefix_ + "Encoded.Qp.H265.S0",
+                                    qp_h265);
+      } else if (spatial_idx == 1) {
+        RTC_HISTOGRAMS_COUNTS_200(kIndex, uma_prefix_ + "Encoded.Qp.H265.S1",
+                                    qp_h265);
+      } else if (spatial_idx == 2) {
+        RTC_HISTOGRAMS_COUNTS_200(kIndex, uma_prefix_ + "Encoded.Qp.H265.S2",
+                                    qp_h265);
+      } else {
+        RTC_LOG(LS_WARNING)
+              << "QP stats not recorded for H265 spatial idx " << spatial_idx;
+      }
+    }
   }
 
   if (first_rtp_stats_time_ms_ != -1) {

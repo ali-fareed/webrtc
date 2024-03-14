@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2023 The WebRTC project authors. All Rights Reserved.
+ *  Copyright (c) 2018 The WebRTC project authors. All Rights Reserved.
  *
  *  Use of this source code is governed by a BSD-style license
  *  that can be found in the LICENSE file in the root of the source
@@ -12,11 +12,14 @@
 #define COMMON_VIDEO_H265_H265_VPS_PARSER_H_
 
 #include "absl/types/optional.h"
-#include "api/array_view.h"
+
+namespace rtc {
+class BitBuffer;
+}
 
 namespace webrtc {
 
-// A class for parsing out video parameter set (VPS) data from an H265 NALU.
+// A class for parsing out sequence parameter set (VPS) data from an H265 NALU.
 class H265VpsParser {
  public:
   // The parsed state of the VPS. Only some select values are stored.
@@ -33,8 +36,7 @@ class H265VpsParser {
  protected:
   // Parse the VPS state, for a bit buffer where RBSP decoding has already been
   // performed.
-  static absl::optional<VpsState> ParseInternal(
-      rtc::ArrayView<const uint8_t> buffer);
+  static absl::optional<VpsState> ParseInternal(rtc::BitBuffer* bit_buffer);
 };
 
 }  // namespace webrtc
