@@ -43,7 +43,7 @@ using ::dcsctp::SendPacketStatus;
 // connection recovers, it may take a long time to reach the new backoff
 // duration. By limiting it to a reasonable limit, the time to recover reduces.
 constexpr dcsctp::DurationMs kMaxTimerBackoffDuration =
-    dcsctp::DurationMs(3000);
+    dcsctp::DurationMs(150);
 
 enum class WebrtcPPID : dcsctp::PPID::UnderlyingType {
   // https://www.rfc-editor.org/rfc/rfc8832.html#section-8.1
