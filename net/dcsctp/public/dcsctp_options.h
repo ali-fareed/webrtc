@@ -110,10 +110,10 @@ struct DcSctpOptions {
   DurationMs rto_min = DurationMs(400);
 
   // T1-init timeout.
-  DurationMs t1_init_timeout = DurationMs(50);
+  DurationMs t1_init_timeout = DurationMs(1000);
 
   // T1-cookie timeout.
-  DurationMs t1_cookie_timeout = DurationMs(50);
+  DurationMs t1_cookie_timeout = DurationMs(1000);
 
   // T2-shutdown timeout.
   DurationMs t2_shutdown_timeout = DurationMs(1000);
