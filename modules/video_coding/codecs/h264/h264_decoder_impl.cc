@@ -13,6 +13,7 @@
 // build with H264 support, please do not move anything out of the
 // #ifdef unless needed and tested.
 #ifdef WEBRTC_USE_H264
+#ifdef WEBRTC_USE_H264_DECODER
 
 #include "modules/video_coding/codecs/h264/h264_decoder_impl.h"
 
@@ -658,4 +659,5 @@ void H264DecoderImpl::ReportError() {
 
 }  // namespace webrtc
 
+#endif // WEBRTC_USE_H264_DECODER
 #endif  // WEBRTC_USE_H264

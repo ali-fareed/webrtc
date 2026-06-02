@@ -153,7 +153,7 @@ bool H264Encoder::SupportsScalabilityMode(ScalabilityMode scalability_mode) {
 
 std::unique_ptr<H264Decoder> H264Decoder::Create() {
   RTC_DCHECK(H264Decoder::IsSupported());
-#if defined(WEBRTC_USE_H264)
+#if defined(WEBRTC_USE_H264) && defined(WEBRTC_USE_H264_DECODER)
   RTC_CHECK(g_rtc_use_h264);
   RTC_LOG(LS_INFO) << "Creating H264DecoderImpl.";
   return std::make_unique<H264DecoderImpl>();

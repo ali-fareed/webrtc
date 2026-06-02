@@ -328,7 +328,7 @@ RtpVideoStreamReceiver2::RtpVideoStreamReceiver2(
   }
 
   // Only construct the encrypted receiver if frame encryption is enabled.
-  if (config_.crypto_options.sframe.require_frame_encryption) {
+  if (config_.crypto_options.sframe.require_frame_encryption || frame_decryptor) {
     buffered_frame_decryptor_ =
         std::make_unique<BufferedFrameDecryptor>(this, this, field_trials_);
     if (frame_decryptor != nullptr) {
