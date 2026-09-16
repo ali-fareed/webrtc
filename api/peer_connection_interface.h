@@ -128,6 +128,7 @@
 // inject a PacketSocketFactory and/or NetworkManager, and not expose
 // PortAllocator in the PeerConnection api.
 #include "api/ref_count.h"
+#include "p2p/base/dtls_transport_factory.h"
 #include "p2p/base/port_allocator.h"
 #include "rtc_base/network.h"
 #include "rtc_base/network_constants.h"
@@ -145,6 +146,7 @@ class Thread;
 }  // namespace rtc
 
 namespace webrtc {
+class RtpPacketReceived;
 
 // MediaFactory class definition is not part of the api.
 class MediaFactory;
@@ -1355,6 +1357,12 @@ class PeerConnectionObserver {
   // The heuristics for defining what constitutes "interesting" are
   // implementation-defined.
   virtual void OnInterestingUsage(int usage_pattern) {}
+
+  // TGCALLS SEAM (tgcalls::GroupInstanceReferenceImpl): an RTP packet the
+  // transport could not demux (no MID, SSRC or payload-type binding). Called
+  // on the network thread, after SRTP unprotect, before the packet is handed
+  // to Call for bandwidth estimation. Default no-op.
+  virtual void OnUnDemuxableRtpPacket(const RtpPacketReceived& packet) {}
 };
 
 // PeerConnectionDependencies holds all of PeerConnections dependencies.
@@ -1385,6 +1393,10 @@ struct RTC_EXPORT PeerConnectionDependencies final {
   std::unique_ptr<webrtc::AsyncDnsResolverFactoryInterface>
       async_dns_resolver_factory;
   std::unique_ptr<webrtc::IceTransportFactory> ice_transport_factory;
+  // TGCALLS SEAM (tgcalls::MtProtoDtlsTransportFactory): plumbs the factory
+  // that JsepTransportController::Config already accepts. Null means the
+  // stock cricket::DtlsTransport.
+  std::unique_ptr<cricket::DtlsTransportFactory> dtls_transport_factory;
   std::unique_ptr<rtc::RTCCertificateGeneratorInterface> cert_generator;
   std::unique_ptr<rtc::SSLCertificateVerifier> tls_cert_verifier;
   std::unique_ptr<webrtc::VideoBitrateAllocatorFactory>
@@ -1488,6 +1500,16 @@ class RTC_EXPORT PeerConnectionFactoryInterface
     // requirement, allowing unsecured media. Should only be used for
     // testing/debugging.
     bool disable_encryption = false;
+
+    // TGCALLS SEAM (tgcalls::MtProtoDtlsTransport): transport security is
+    // supplied below this stack by an external layer. Selects the plain
+    // RtpTransport (no SRTP) and drops BaseChannel's SRTP requirement, but
+    // leaves DTLS *enabled*: certificates, fingerprints, the SCTP factory and
+    // SDP negotiation stay stock. Pair it with
+    // PeerConnectionDependencies::dtls_transport_factory supplying a
+    // DtlsTransportInternal that performs no handshake. Default off: nothing
+    // changes for a caller that does not set it.
+    bool external_transport_security = false;
 
     // If set to true, any platform-supported network monitoring capability
     // won't be used, and instead networks will only be updated via polling.

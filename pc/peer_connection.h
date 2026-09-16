@@ -595,7 +595,7 @@ class PeerConnection : public PeerConnectionInternal,
   InitializeRtcpCallback();
 
   std::function<void(const RtpPacketReceived& parsed_packet)>
-  InitializeUnDemuxablePacketHandler();
+  InitializeUnDemuxablePacketHandler(PeerConnectionObserver* observer);
 
   const Environment env_;
   const rtc::scoped_refptr<ConnectionContext> context_;
@@ -628,6 +628,8 @@ class PeerConnection : public PeerConnectionInternal,
                                // pointer is given to
                                // `jsep_transport_controller_` and used on the
                                // network thread.
+  // TGCALLS SEAM: see PeerConnectionDependencies::dtls_transport_factory.
+  const std::unique_ptr<cricket::DtlsTransportFactory> dtls_transport_factory_;
   const std::unique_ptr<rtc::SSLCertificateVerifier> tls_cert_verifier_
       RTC_GUARDED_BY(network_thread());
 

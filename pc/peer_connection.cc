@@ -590,6 +590,7 @@ PeerConnection::PeerConnection(
           std::move(dependencies.async_dns_resolver_factory)),
       port_allocator_(std::move(dependencies.allocator)),
       ice_transport_factory_(std::move(dependencies.ice_transport_factory)),
+      dtls_transport_factory_(std::move(dependencies.dtls_transport_factory)),
       tls_cert_verifier_(std::move(dependencies.tls_cert_verifier)),
       call_(std::move(call)),
       worker_thread_safety_(PendingTaskSafetyFlag::CreateAttachedToTaskQueue(
@@ -743,7 +744,10 @@ JsepTransportController* PeerConnection::InitializeTransportController_n(
   config.redetermine_role_on_ice_restart =
       configuration.redetermine_role_on_ice_restart;
   config.ssl_max_version = options_.ssl_max_version;
-  config.disable_encryption = options_.disable_encryption;
+  // TGCALLS SEAM (Options::external_transport_security): the plain
+  // RtpTransport without turning DTLS off at the PeerConnection level.
+  config.disable_encryption =
+      options_.disable_encryption || options_.external_transport_security;
   config.bundle_policy = configuration.bundle_policy;
   config.rtcp_mux_policy = configuration.rtcp_mux_policy;
   // TODO(bugs.webrtc.org/9891) - Remove options_.crypto_options then remove
@@ -753,29 +757,22 @@ JsepTransportController* PeerConnection::InitializeTransportController_n(
                               : options_.crypto_options;
   config.transport_observer = this;
   config.rtcp_handler = InitializeRtcpCallback();
-  config.un_demuxable_packet_handler = InitializeUnDemuxablePacketHandler();
+  config.un_demuxable_packet_handler =
+      InitializeUnDemuxablePacketHandler(dependencies.observer);
   config.event_log = &env_.event_log();
 #if defined(ENABLE_EXTERNAL_AUTH)
   config.enable_external_auth = true;
 #endif
   config.active_reset_srtp_params = configuration.active_reset_srtp_params;
 
-  // TGCALLS PATCH: SCTP no longer requires DTLS.
-  //
-  // Upstream gates this on dtls_enabled_ because SCTP would otherwise run
-  // unprotected. tgcalls disables DTLS deliberately when the media is already
-  // protected by an mtproto layer below ICE, which carries its own shared key -
-  // so DTLS is redundant, and paying for its handshake and record framing is
-  // exactly what we are avoiding.
-  //
-  // The DtlsTransport object still exists under disable_encryption (it is passed
-  // to CreateUnencryptedRtpTransport), and an inactive one is a pure passthrough
-  // to ICE (dtls_transport.cc:431), so SCTP rides straight through it into
-  // mtproto - matching 13.0.0, where the data channel shares the mtproto
-  // transport (NativeNetworkingImpl.cpp:690).
-  config.sctp_factory = context_->sctp_transport_factory();
+  // DTLS has to be enabled to use SCTP.
+  if (dtls_enabled_) {
+    config.sctp_factory = context_->sctp_transport_factory();
+  }
 
   config.ice_transport_factory = ice_transport_factory_.get();
+  // TGCALLS SEAM: null keeps the stock cricket::DtlsTransport.
+  config.dtls_transport_factory = dtls_transport_factory_.get();
   config.on_dtls_handshake_error_ =
       [weak_ptr = weak_factory_.GetWeakPtr()](rtc::SSLHandshakeError s) {
         if (weak_ptr) {
@@ -2712,7 +2709,9 @@ void PeerConnection::ReportRemoteIceCandidateAdded(
 
 bool PeerConnection::SrtpRequired() const {
   RTC_DCHECK_RUN_ON(signaling_thread());
-  return dtls_enabled_;
+  // TGCALLS SEAM (Options::external_transport_security): SRTP is not required
+  // when an external layer secures the transport; DTLS stays enabled for SDP.
+  return dtls_enabled_ && !options_.external_transport_security;
 }
 
 void PeerConnection::OnTransportControllerGatheringState(
@@ -2991,9 +2990,17 @@ PeerConnection::InitializeRtcpCallback() {
 }
 
 std::function<void(const RtpPacketReceived& parsed_packet)>
-PeerConnection::InitializeUnDemuxablePacketHandler() {
+PeerConnection::InitializeUnDemuxablePacketHandler(
+    PeerConnectionObserver* observer) {
   RTC_DCHECK_RUN_ON(network_thread());
-  return [this](const RtpPacketReceived& parsed_packet) {
+  return [this, observer](const RtpPacketReceived& parsed_packet) {
+    // TGCALLS SEAM (PeerConnectionObserver::OnUnDemuxableRtpPacket): the
+    // observer outlives this PeerConnection by API contract, and Close()
+    // destroys the transport controller before clearing the observer, so no
+    // packet can reach here afterwards. Network thread, per dropped packet.
+    if (observer) {
+      observer->OnUnDemuxableRtpPacket(parsed_packet);
+    }
     worker_thread()->PostTask(
         SafeTask(worker_thread_safety_, [this, parsed_packet]() {
           // Deliver the packet anyway to Call to allow Call to do BWE.
