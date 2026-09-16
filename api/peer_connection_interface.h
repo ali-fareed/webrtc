@@ -128,7 +128,6 @@
 // inject a PacketSocketFactory and/or NetworkManager, and not expose
 // PortAllocator in the PeerConnection api.
 #include "api/ref_count.h"
-#include "p2p/base/dtls_transport_factory.h"
 #include "p2p/base/port_allocator.h"
 #include "rtc_base/network.h"
 #include "rtc_base/network_constants.h"
@@ -144,6 +143,12 @@
 namespace rtc {
 class Thread;
 }  // namespace rtc
+
+// TGCALLS SEAM: forward declarations keep the public header's footprint
+// unchanged; the complete types are only needed inside pc/.
+namespace cricket {
+class DtlsTransportFactory;
+}  // namespace cricket
 
 namespace webrtc {
 class RtpPacketReceived;
