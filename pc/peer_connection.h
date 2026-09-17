@@ -400,6 +400,7 @@ class PeerConnection : public PeerConnectionInternal,
 
   bool CreateDataChannelTransport(absl::string_view mid) override;
   void DestroyDataChannelTransport(RTCError error) override;
+  void ResetSctpDataMidAfterRollback() override;
 
   // Asynchronously calls SctpTransport::Start() on the network thread for
   // `sctp_mid()` if set. Called as part of setting the local description.
