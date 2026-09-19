@@ -439,6 +439,7 @@ bool PeerConnectionInterface::RTCConfiguration::operator==(
     bool offer_extmap_allow_mixed;
     std::string turn_logging_id;
     bool enable_implicit_rollback;
+    bool disable_payload_type_demuxing;  // TGCALLS SEAM
     absl::optional<int> report_usage_pattern_delay_ms;
     absl::optional<int> stable_writable_connection_ping_interval_ms;
     VpnPreference vpn_preference;
@@ -499,6 +500,7 @@ bool PeerConnectionInterface::RTCConfiguration::operator==(
          offer_extmap_allow_mixed == o.offer_extmap_allow_mixed &&
          turn_logging_id == o.turn_logging_id &&
          enable_implicit_rollback == o.enable_implicit_rollback &&
+         disable_payload_type_demuxing == o.disable_payload_type_demuxing &&
          report_usage_pattern_delay_ms == o.report_usage_pattern_delay_ms &&
          stable_writable_connection_ping_interval_ms ==
              o.stable_writable_connection_ping_interval_ms &&

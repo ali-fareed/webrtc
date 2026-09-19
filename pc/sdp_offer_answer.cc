@@ -5454,7 +5454,11 @@ bool SdpOfferAnswerHandler::UpdatePayloadTypeDemuxingState(
     auto bundle_it = bundle_groups_by_mid.find(channel->mid());
     const cricket::ContentGroup* bundle_group =
         bundle_it != bundle_groups_by_mid.end() ? bundle_it->second : nullptr;
-    bool pt_demux_enabled = RtpTransceiverDirectionHasRecv(local_direction);
+    // TGCALLS SEAM (tgcalls::GroupInstanceReferenceImpl): see
+    // RTCConfiguration::disable_payload_type_demuxing.
+    bool pt_demux_enabled =
+        RtpTransceiverDirectionHasRecv(local_direction) &&
+        !pc_->configuration()->disable_payload_type_demuxing;
     if (media_type == cricket::MediaType::MEDIA_TYPE_AUDIO) {
       pt_demux_enabled &=
           !bundle_group ||
