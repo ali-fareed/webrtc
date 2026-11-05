@@ -116,6 +116,11 @@ struct RTC_EXPORT Codec {
   // H.264(and H.265, if enabled) levels are not compared.
   bool Matches(const Codec& codec) const;
   bool MatchesRtpCodec(const webrtc::RtpCodec& capability) const;
+  // TGCALLS BACKPORT (upstream's IsSameRtpCodecIgnoringLevel, media/base/codec_comparators): as MatchesRtpCodec, but
+  // the level is not compared: H.264's profile-level-id compares by profile only, H.265's level-id is ignored. Every
+  // other parameter must still be equal. Used where setParameters matches an encoding's codec, since a device's own
+  // H.264 level and the level its peer negotiated differ.
+  bool MatchesRtpCodecIgnoringLevel(const webrtc::RtpCodec& capability) const;
 
   // Find the parameter for `name` and write the value to `out`.
   bool GetParam(const std::string& name, std::string* out) const;

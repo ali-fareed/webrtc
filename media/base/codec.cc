@@ -249,6 +249,38 @@ bool Codec::MatchesRtpCodec(const webrtc::RtpCodec& codec_capability) const {
            codec_parameters.parameters == codec_capability.parameters));
 }
 
+bool Codec::MatchesRtpCodecIgnoringLevel(
+    const webrtc::RtpCodec& codec_capability) const {
+  webrtc::RtpCodecParameters codec_parameters = ToCodecParameters();
+  if (codec_parameters.name != codec_capability.name ||
+      codec_parameters.kind != codec_capability.kind) {
+    return false;
+  }
+  if (codec_parameters.name == cricket::kRtxCodecName) {
+    return true;
+  }
+  if (codec_parameters.num_channels != codec_capability.num_channels ||
+      codec_parameters.clock_rate != codec_capability.clock_rate) {
+    return false;
+  }
+  webrtc::CodecParameterMap params1 = codec_parameters.parameters;
+  webrtc::CodecParameterMap params2 = codec_capability.parameters;
+  if (absl::EqualsIgnoreCase(codec_parameters.name, kH264CodecName)) {
+    if (!webrtc::H264IsSameProfile(params1, params2)) {
+      return false;
+    }
+    params1.erase(kH264FmtpProfileLevelId);
+    params2.erase(kH264FmtpProfileLevelId);
+  }
+#ifdef RTC_ENABLE_H265
+  if (absl::EqualsIgnoreCase(codec_parameters.name, kH265CodecName)) {
+    params1.erase(kH265FmtpLevelId);
+    params2.erase(kH265FmtpLevelId);
+  }
+#endif
+  return params1 == params2;
+}
+
 bool Codec::GetParam(const std::string& name, std::string* out) const {
   webrtc::CodecParameterMap::const_iterator iter = params.find(name);
   if (iter == params.end())

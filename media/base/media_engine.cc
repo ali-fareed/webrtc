@@ -81,7 +81,9 @@ webrtc::RTCError CheckScalabilityModeValues(
     if (rtp_parameters.encodings[i].codec) {
       bool codecFound = false;
       for (const cricket::VideoCodec& codec : codec_preferences) {
-        if (codec.MatchesRtpCodec(*rtp_parameters.encodings[i].codec)) {
+        // TGCALLS BACKPORT: the level is not compared (MatchesRtpCodecIgnoringLevel); a sender's own H.264 level
+        // and the one negotiated with its peer differ.
+        if (codec.MatchesRtpCodecIgnoringLevel(*rtp_parameters.encodings[i].codec)) {
           codecFound = true;
           send_codec = codec;
           break;
